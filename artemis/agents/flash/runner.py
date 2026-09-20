@@ -41,12 +41,14 @@ import asyncio
 import base64
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import re
 import uuid
 
 from jinja2 import Template
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -156,6 +158,7 @@ class FlashRunner:
             self.transcript_cfg = MemoryTranscriptConfig()
             self.chunking_cfg = None
 
+        self._jev_history = []
         self.controller = UnifiedMobileController(ctx)
         # ``agent_name="flash"`` makes ask_explorer follow ``explorer.flash_mode``
         # (the Flash profile knob) instead of the Pro profile's tier.
@@ -276,6 +279,8 @@ class FlashRunner:
 
     #: The model of the current run; decides how screenshot tool results travel.
     _llm = None
+    _jev = None
+    _jev_history: list[str]
 
     def _init_llm(self):
         """Initializes the Universal LLM via the Service Layer."""
@@ -881,6 +886,31 @@ class FlashRunner:
             )
         return pre_screenshot_bytes, xml_list, action_sequence
 
+    async def _try_jev(self, state: State) -> AIMessage | None:
+        """Opt-in fast path (``ARTEMIS_FLASH_DECIDER=jev``): let Jev pick the
+        next tap/back/scroll from the element list, or None to use the VLM."""
+        if os.environ.get("ARTEMIS_FLASH_DECIDER", "").lower() != "jev":
+            return None
+        try:
+            if self._jev is None:
+                from artemis.llm.jev_adapter import JevFlashModel
+
+                self._jev = JevFlashModel()
+            elements = getattr(state, "indexed_elements", None) or []
+            decision = await self._jev.decide(self.goal, elements, self._jev_history)
+        except Exception as e:  # any Jev failure must never break the run
+            logger.warning(f"Jev decider failed, using VLM: {e}")
+            return None
+        if decision.tool_call is None:
+            logger.info(f"Jev escalated to VLM: {decision.escalate_reason}")
+            return None
+        call = decision.tool_call
+        logger.info(
+            f"Jev chose {call['name']}({call['args']}) conf={decision.action_confidence:.2f}"
+        )
+        self._jev_history.append(f"{call['name']} {call['args']}")
+        return AIMessage(content=f"[jev] {decision.action}", tool_calls=[call])
+
     async def _invoke_model(self, llm, current_tools: list, messages: list[BaseMessage]):
         """Binds the active tools and invokes the model through the LLM gateway."""
         # Bind active tools
@@ -1095,7 +1125,9 @@ class FlashRunner:
             turn_base = len(messages) - 1
             current_tools = report_only_tools if is_final else tools_declaration
 
-            response = await self._invoke_model(llm, current_tools, messages)
+            response = None if is_final else await self._try_jev(state)
+            if response is None:
+                response = await self._invoke_model(llm, current_tools, messages)
 
             if response is None:
                 break
