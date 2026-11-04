@@ -31,8 +31,24 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def headroid_selected() -> bool:
+    """True when ARTEMIS_DRIVER=headroid asks for the headroid hidden-display driver."""
+    return os.environ.get("ARTEMIS_DRIVER", "").strip().lower() == "headroid"
+
+
 def create_driver(ctx: "ArtemisContext") -> BaseDeviceDriver:
     """Instantiates the appropriate BaseDeviceDriver based on the runtime context."""
+    # 0. headroid hidden-display driver (explicit opt-in; ctx.adb_client stays untouched).
+    if headroid_selected():
+        try:
+            from headroid.integrations.artemis import HeadroidDriver
+        except ImportError as exc:
+            raise RuntimeError(
+                'ARTEMIS_DRIVER=headroid requires the headroid package: '
+                'pip install "headroid[artemis]"'
+            ) from exc
+        return HeadroidDriver(device_id=ctx.device.device_id)
+
     # 1. Cloud mode check. Cloud devices are reached through the gateway's
     # RemoteUIAutomatorClient; ARTEMIS_HIERARCHY_BACKEND does not apply there
     # because the Accessibility Helper needs a local adb forward.
