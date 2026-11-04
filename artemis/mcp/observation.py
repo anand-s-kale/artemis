@@ -34,6 +34,8 @@ from artemis.utils.visualization import format_minimal_list_with_elements
 
 logger = get_logger(__name__)
 
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
 __all__ = ["observe"]
 
 
@@ -109,7 +111,9 @@ async def observe(
     if not screenshot_path:
         try:
             temp_dir = get_temp_dir("screenshots")
-            temp_file = temp_dir / f"screenshot_{int(time.time())}.jpg"
+            # Name the file after its real format: some drivers (headroid) return PNG.
+            suffix = ".png" if screenshot_bytes.startswith(_PNG_MAGIC) else ".jpg"
+            temp_file = temp_dir / f"screenshot_{int(time.time())}{suffix}"
             temp_file.write_bytes(screenshot_bytes)
             screenshot_path = str(temp_file)
         except Exception as e:

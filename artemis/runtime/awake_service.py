@@ -37,7 +37,18 @@ AWAKE_HEARTBEAT_INTERVAL_SECONDS = 5.0
 DEVICE_DISCOVERY_INTERVAL_SECONDS = 2.0
 
 
+def _headroid_driver_selected() -> bool:
+    # Same test as artemis.drivers.factory.headroid_selected(); not imported from
+    # there because the driver factory imports far more than this module needs.
+    return os.environ.get("ARTEMIS_DRIVER", "").strip().lower() == "headroid"
+
+
 def _awake_enabled() -> bool:
+    # Under ARTEMIS_DRIVER=headroid the device is driven on a hidden display: the
+    # awake policy (stay-on setting, wake/keyguard keys, heartbeat keys) would act
+    # on the phone's own screen and change its settings, so it never runs.
+    if _headroid_driver_selected():
+        return False
     enabled = os.environ.get("ARTEMIS_KEEP_DEVICE_AWAKE", "true").strip().lower()
     return enabled not in {"0", "false", "no", "off"}
 

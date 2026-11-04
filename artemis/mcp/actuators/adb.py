@@ -99,6 +99,16 @@ async def ensure_focus_at_coords(controller, x: int, y: int) -> str | None:
     return None
 
 
+def _hidden_display_errors() -> tuple[type[BaseException], ...]:
+    """Errors the headroid driver raises for a failed device call (not bugs)."""
+    errors: tuple[type[BaseException], ...] = (OSError, RuntimeError, ValueError)
+    try:
+        from headroid.rpc import RpcError
+    except ImportError:
+        return errors
+    return (*errors, RpcError)
+
+
 class AdbActuator:
     """Drives an Android device through ``UnifiedMobileController`` over ADB."""
 
@@ -292,13 +302,20 @@ class AdbActuator:
         be the Android package name.
         """
         if action.lower() == "launch":
-            if await self.controller.launch_app(package):
+            error = ""
+            try:
+                launched = await self.controller.launch_app(package)
+            except _hidden_display_errors() as exc:
+                # headroid raises its own RPC errors (unknown package, frozen app);
+                # report them with the package-name hint instead of a traceback.
+                launched, error = False, f" ({exc})"
+            if launched:
                 return ActionResult.success(
                     "manage_app", f"Launched app '{package}' on the hidden display."
                 )
             return ActionResult.failure(
                 "manage_app",
-                f"Failed to launch app '{package}' on the hidden display. Under"
+                f"Failed to launch app '{package}' on the hidden display{error}. Under"
                 " ARTEMIS_DRIVER=headroid manage_app needs the Android package name"
                 " (for example com.android.settings).",
             )
@@ -403,19 +420,16 @@ class AdbActuator:
 
     async def open_link(self, url: str) -> ActionResult:
         if headroid_selected():
-            # The controller's open_url runs `am start` without --display, which
-            # would open the link on the main screen.
-            open_url = getattr(self.controller.driver, "open_url", None)
-            if open_url is None:
-                return ActionResult.failure(
-                    "open_link",
-                    "open_link is not supported by this headroid driver (it has no"
-                    " open_url); refusing to open the link on the main display.",
-                    code=ActionCode.UNSUPPORTED,
-                )
-            success = await open_url(url)
-        else:
-            success = await self.controller.open_url(url)
+            # The controller's open_url runs `am start` without --display (the
+            # main screen), and a raw `am start` on the hidden display would leave
+            # the opened app unmuted, untracked and running after the session ends.
+            return ActionResult.failure(
+                "open_link",
+                "open_link is not available on the hidden display yet; launch the app"
+                " with manage_app instead.",
+                code=ActionCode.UNSUPPORTED,
+            )
+        success = await self.controller.open_url(url)
         if success:
             return ActionResult.success("open_link", f"Opened link '{url}'.")
         return ActionResult.failure("open_link", f"Failed to open link '{url}'.")

@@ -14,6 +14,7 @@
 
 """Unit tests for CascadingConfigEngine and variable interpolation."""
 
+import os
 from unittest.mock import patch
 
 from artemis.config.core import CascadingConfigEngine, interpolate_config_value
@@ -40,3 +41,44 @@ def test_cascading_config_merge():
     engine = CascadingConfigEngine()
     merged = engine.load_raw_config(cli_overrides={"default": {"model": "gemini-test-custom"}})
     assert merged.get("default", {}).get("model") == "gemini-test-custom"
+
+
+_HEADROID_ENV = {
+    "ARTEMIS_DRIVER": "headroid",
+    "ARTEMIS_MCP_TOOLS": "mobile_observe,mobile_act,mobile_session_end",
+    "ARTEMIS_MCP_INLINE_SCREENSHOT": "1",
+    "ADB_DEVICE_SERIAL": "HIDDEN",
+    "ARTEMIS_DEVICE_ID": "HIDDEN",
+    "ARTEMIS_KEEP_DEVICE_AWAKE": "0",
+}
+_PROJECT_DOTENV = (
+    "ARTEMIS_DRIVER=adb\n"
+    "ARTEMIS_MCP_TOOLS=mobile_run_task\n"
+    "ARTEMIS_MCP_INLINE_SCREENSHOT=0\n"
+    "ADB_DEVICE_SERIAL=OTHER\n"
+    "ARTEMIS_DEVICE_ID=OTHER\n"
+    "ARTEMIS_KEEP_DEVICE_AWAKE=1\n"
+    "SOME_PROJECT_KEY=from-dotenv\n"
+)
+
+
+def test_workspace_dotenv_cannot_override_headroid_settings(tmp_path):
+    (tmp_path / ".env").write_text(_PROJECT_DOTENV, encoding="utf-8")
+    with patch.dict("os.environ", _HEADROID_ENV, clear=False):
+        os.environ.pop("SOME_PROJECT_KEY", None)
+        CascadingConfigEngine(workspace_root=tmp_path)
+        for key, value in _HEADROID_ENV.items():
+            assert os.environ[key] == value, key
+        # Everything else in the project .env still loads as before.
+        assert os.environ["SOME_PROJECT_KEY"] == "from-dotenv"
+
+
+def test_workspace_dotenv_still_overrides_without_headroid(tmp_path):
+    (tmp_path / ".env").write_text(_PROJECT_DOTENV, encoding="utf-8")
+    without_driver = {k: v for k, v in _HEADROID_ENV.items() if k != "ARTEMIS_DRIVER"}
+    with patch.dict("os.environ", without_driver, clear=False):
+        os.environ.pop("ARTEMIS_DRIVER", None)
+        CascadingConfigEngine(workspace_root=tmp_path)
+        assert os.environ["ARTEMIS_DRIVER"] == "adb"
+        assert os.environ["ADB_DEVICE_SERIAL"] == "OTHER"
+        assert os.environ["ARTEMIS_MCP_INLINE_SCREENSHOT"] == "0"

@@ -186,3 +186,21 @@ def test_discovery_returns_nothing_when_pool_claims_no_device(adb_client, _claim
     ]
 
     assert _discover_connected_device_ids() == []
+
+
+@patch.dict(
+    "os.environ",
+    {"ARTEMIS_DRIVER": "headroid", "ARTEMIS_KEEP_DEVICE_AWAKE": "true", "ADB_DEVICE_SERIAL": "S"},
+)
+@patch("artemis.runtime.awake_service.AdbClient")
+@patch("artemis.runtime.awake_service.subprocess.run")
+def test_awake_policy_never_runs_under_headroid(mock_run, adb_client):
+    # Under ARTEMIS_DRIVER=headroid the phone's own screen and settings are off limits.
+    assert _configure_usb_stay_awake("S") is None
+    assert _discover_connected_device_ids() == []
+    service = ScreenAwakeService()
+    assert service.start() == {}
+    assert service.ensure_device("S") is None
+    assert service._monitor_thread is None
+    mock_run.assert_not_called()
+    adb_client.assert_not_called()

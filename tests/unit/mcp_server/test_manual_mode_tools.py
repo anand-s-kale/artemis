@@ -237,3 +237,21 @@ async def test_inline_mode_end_to_end_in_fresh_process(tmp_path):
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip().splitlines()[-1] == "['text', 'image']"
+
+
+@pytest.mark.parametrize(
+    ("name", "data", "mime"),
+    [
+        # PNG bytes in a .jpg file (the observe fallback before the fix) are still PNG.
+        ("shot.jpg", bytes.fromhex("89504e470d0a1a0a") + b"rest", "image/png"),
+        ("shot.jpg", b"\xff\xd8\xff\xe0" + b"jpeg", "image/jpeg"),
+    ],
+)
+async def test_inline_screenshot_mime_follows_the_bytes(monkeypatch, tmp_path, name, data, mime):
+    shot = tmp_path / name
+    shot.write_bytes(data)
+    monkeypatch.setenv("ARTEMIS_MCP_INLINE_SCREENSHOT", "1")
+
+    _result, image = manual_mode._with_inline_screenshot({"screenshot": str(shot)})
+
+    assert image.to_image_content().mimeType == mime

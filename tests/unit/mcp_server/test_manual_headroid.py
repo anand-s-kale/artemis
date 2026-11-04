@@ -84,10 +84,6 @@ class FakeHeadroidDriver:
         return sum(1 for call in self.calls if call[0] == name)
 
 
-class FakeDriverWithoutOpenUrl(FakeHeadroidDriver):
-    open_url = None  # type: ignore[assignment]
-
-
 def _register_driver(monkeypatch, driver_cls) -> None:
     module = types.ModuleType("headroid.integrations.artemis")
     module.HeadroidDriver = driver_cls
@@ -232,25 +228,17 @@ async def test_manage_app_launch_failure_names_package_requirement():
 
 
 @pytest.mark.asyncio
-async def test_open_link_uses_open_url():
+async def test_open_link_is_refused_on_the_hidden_display():
+    # A raw `am start` would leave the opened app unmuted and running after the session.
     actuator, driver = _actuator()
-
-    result = await actuator.open_link("https://example.com")
-
-    assert result.ok, result.message
-    assert ("open_url", "https://example.com") in driver.calls
-
-
-@pytest.mark.asyncio
-async def test_open_link_without_open_url_is_refused(monkeypatch):
-    _register_driver(monkeypatch, FakeDriverWithoutOpenUrl)
-    actuator, _driver = _actuator()
 
     result = await actuator.open_link("https://example.com")
 
     assert not result.ok
     assert result.code == ActionCode.UNSUPPORTED
-    assert "open_url" in result.message
+    assert "open_link is not available on the hidden display yet" in result.message
+    assert "manage_app" in result.message
+    assert driver.count("open_url") == 0
 
 
 @pytest.mark.asyncio

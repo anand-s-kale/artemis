@@ -54,12 +54,21 @@ def _inline_screenshot_enabled() -> bool:
 _STRUCTURED_OUTPUT = False if _inline_screenshot_enabled() else None
 
 
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
 def _with_inline_screenshot(result: dict[str, Any]) -> dict[str, Any]:
     """With ARTEMIS_MCP_INLINE_SCREENSHOT=1, also return the screenshot as image
-    content, for clients that cannot read the local path. Otherwise unchanged."""
+    content, for clients that cannot read the local path. Otherwise unchanged.
+
+    The MIME type comes from the image bytes, not the file name: a screenshot
+    saved as .jpg may hold PNG data."""
     path = result.get("screenshot")
     if _inline_screenshot_enabled() and path and os.path.isfile(path):
-        return [result, Image(path=path)]
+        with open(path, "rb") as handle:
+            data = handle.read()
+        image_format = "png" if data.startswith(_PNG_MAGIC) else "jpeg"
+        return [result, Image(data=data, format=image_format)]
     return result
 
 
@@ -127,7 +136,8 @@ async def mobile_act(
     Args:
         action: One of: click, long_press, input_text, click_sequence, swipe,
           press_key, manage_app, wait_for_delay, wait_for_text, open_link,
-          erase_one_char, focus_and_clear_text. A click/long_press/input_text
+          erase_one_char, focus_and_clear_text (on a headroid hidden display
+          open_link is not available yet). A click/long_press/input_text
           'target' may be an element index from the last mobile_observe or
           mobile_act call's elements_text list, or a normalized [x, y] pair
           (in which case args must also include 'target_description').

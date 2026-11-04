@@ -35,7 +35,7 @@ from typing import Any
 
 from artemis.mcp.action_executor import McpActionExecutor
 from artemis.drivers.factory import headroid_selected
-from artemis.mcp.adb_server import _get_controller, drop_controller
+from artemis.mcp.adb_server import _get_controller, _resolve_serial, drop_controller
 from artemis.runtime.device_lock import DeviceBusyError, DeviceExecutionLock
 
 __all__ = ["ManualSession", "ManualSessionRegistry", "DEFAULT_IDLE_TIMEOUT_S"]
@@ -86,6 +86,11 @@ class ManualSessionRegistry:
 
     @staticmethod
     def _key(device_serial: str | None) -> str:
+        if headroid_selected():
+            # The controller cache resolves an omitted serial to the configured
+            # one; key the session and its lock the same way, so "no serial" and
+            # the explicit serial are one session on one hidden display.
+            return _resolve_serial(device_serial) or "default"
         return device_serial or "default"
 
     def _reap_idle(self) -> None:

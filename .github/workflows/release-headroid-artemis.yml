@@ -1,5 +1,4 @@
 # Copyright 2026 Google LLC
-# Modifications Copyright 2026 Anand S Kale
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,6 +71,10 @@ jobs:
           assert root_name == "headroid-artemis", root_name
           assert client_name == "headroid-artemis-client", client_name
           assert root_version == client_version, (root_version, client_version)
+          with open("pyproject.toml", "rb") as handle:
+              dependencies = tomllib.load(handle)["project"]["dependencies"]
+          pins = [d for d in dependencies if d.replace(" ", "").startswith(client_name + "==")]
+          assert pins == [f"{client_name}=={client_version}"], (pins, client_version)
           if os.environ["GITHUB_REF"].startswith("refs/tags/"):
               tag = os.environ["GITHUB_REF_NAME"]
               assert tag == f"headroid-artemis-v{root_version}", (tag, root_version)
@@ -118,8 +121,10 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist-client/
+          skip-existing: true
 
       - name: Publish headroid-artemis
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist-root/
+          skip-existing: true

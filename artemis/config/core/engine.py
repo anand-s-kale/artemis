@@ -15,6 +15,7 @@
 """Multi-source Cascading Configuration Engine."""
 
 import json
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -52,6 +53,25 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
+#: Settings a launcher such as ``headroid mcp`` puts in the environment to keep
+#: ARTEMIS on a hidden display. A project .env must not change them.
+HEADROID_PINNED_ENV_KEYS = (
+    "ARTEMIS_DRIVER",
+    "ARTEMIS_MCP_TOOLS",
+    "ARTEMIS_MCP_INLINE_SCREENSHOT",
+    "ADB_DEVICE_SERIAL",
+    "ARTEMIS_DEVICE_ID",
+    "ARTEMIS_KEEP_DEVICE_AWAKE",
+)
+
+
+def _headroid_pinned_environment() -> dict[str, str]:
+    """The pinned keys already set, when ARTEMIS_DRIVER=headroid; otherwise {}."""
+    if os.environ.get("ARTEMIS_DRIVER", "").strip().lower() != "headroid":
+        return {}
+    return {key: os.environ[key] for key in HEADROID_PINNED_ENV_KEYS if key in os.environ}
+
+
 class CascadingConfigEngine:
     """Manages 5-tier configuration hierarchy with automatic cascade and interpolation."""
 
@@ -74,7 +94,9 @@ class CascadingConfigEngine:
         # 3. Workspace .env
         ws_env = self.workspace_root / ".env"
         if ws_env.exists():
+            pinned = _headroid_pinned_environment()
             load_dotenv(dotenv_path=ws_env, override=True, encoding="utf-8")
+            os.environ.update(pinned)
 
     def load_raw_config(
         self,

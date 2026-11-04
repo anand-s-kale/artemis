@@ -84,6 +84,7 @@ from mcp_server.base import mcp
 
 # 2. Import tools to register them
 import mcp_server.tools  # noqa: F401
+from artemis.drivers.factory import headroid_selected
 from artemis.runtime import shutdown_awake_service, start_awake_service
 
 
@@ -118,7 +119,10 @@ def _allowlist_from_env() -> set[str] | None:
 def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8001):
     """Main entrypoint to run the Artemis Mobile Agent MCP server."""
     apply_tool_allowlist(mcp, _allowlist_from_env())
-    threading.Thread(target=start_awake_service, daemon=True, name="artemis-awake-init").start()
+    if not headroid_selected():
+        # The awake service wakes and configures the phone's own screen; under
+        # ARTEMIS_DRIVER=headroid only the hidden display may be touched.
+        threading.Thread(target=start_awake_service, daemon=True, name="artemis-awake-init").start()
     try:
         if transport.lower() == "sse":
             mcp.run(transport="sse", host=host, port=port)
