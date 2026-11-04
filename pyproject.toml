@@ -14,7 +14,7 @@
 
 [project]
 name = "headroid-artemis"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Autonomous AI Assistant for Mobile Automation"
 readme = "README.md"
 
@@ -26,7 +26,7 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Remote Python SDK (kept as a zero-dependency workspace package)
-    "headroid-artemis-client==0.1.0a1",
+    "headroid-artemis-client==0.1.0a2",
     # Orchestration & Framework
     "langgraph>=1.0.2,<2.0.0",
     "langchain>=1.0.0",

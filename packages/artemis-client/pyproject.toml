@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "headroid-artemis-client"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Zero-runtime-dependency Python client for a remote Artemis host"
 readme = "README.md"
 requires-python = ">=3.10"

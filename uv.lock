@@ -1420,7 +1420,7 @@ wheels = [
 
 [[package]]
 name = "headroid-artemis"
-version = "0.1.0a1"
+version = "0.1.0a2"
 source = { editable = "." }
 dependencies = [
     { name = "adbutils" },
@@ -1552,7 +1552,7 @@ dev = [
 
 [[package]]
 name = "headroid-artemis-client"
-version = "0.1.0a1"
+version = "0.1.0a2"
 source = { editable = "packages/artemis-client" }
 
 [[package]]
