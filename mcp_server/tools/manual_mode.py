@@ -144,8 +144,26 @@ async def mobile_act(
           ask_explorer, video_analyzer, and the note/history tools are not
           available here: they invoke Artemis's own LLM and would silently
           reintroduce the credential requirement this mode avoids.
-        args: Action-specific arguments, e.g. {"target": 3} for click, or
-          {"text": "hello", "target": 2} for input_text. Defaults to {}.
+        args: Action-specific arguments (coordinates are normalized 0-1000;
+          target is an element index or [x, y]). Defaults to {}. Per action:
+          click {target, times=1, delay_ms=100};
+          long_press {target, duration=1000 (ms)};
+          input_text {text, target, clear_exist=true (false appends)};
+          click_sequence {sequence: [[x, y], ...], target_descriptions: [...],
+          delay_ms=50} (coordinates only, no indexes);
+          swipe {direction: up|down|left|right} or {start: [x, y], end: [x, y],
+          target_description} plus optional duration (ms);
+          press_key {key: ENTER|BACK|HOME|APP_SWITCH, or another Android
+          KEYCODE name; a headroid hidden display refuses HOME and APP_SWITCH};
+          manage_app {action: "launch"|"stop", app_name: "<Android package name,
+          e.g. com.android.settings>"} (not package_name or package; on a
+          headroid hidden display it must be the package name);
+          wait_for_delay {time_in_ms};
+          wait_for_text {text, wait_state: "appear"|"disappear",
+          timeout_ms=5000};
+          open_link {url};
+          erase_one_char {};
+          focus_and_clear_text {target: [x, y]}.
         device_serial: Optional device serial to target; omitted selects the
           default connected device.
     """

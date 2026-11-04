@@ -358,12 +358,18 @@ class McpActionExecutor:
             return "press_key", {"key": args.get("key", "BACK")}, None, {}
 
         if raw_name == "manage_app":
+            action = args.get("action", "launch")
+            app_name = args.get("app_name", "")
+            if str(action).lower() not in ("launch", "stop") or not app_name:
+                raise _ArgError(
+                    "Error during manage_app: expected args"
+                    ' {"action": "launch" | "stop", "app_name": "<package name or app name>"}'
+                    f" but got action={action!r}, app_name={app_name!r}"
+                    f" (received args: {sorted(args)})."
+                )
             return (
                 "manage_app",
-                {
-                    "action": args.get("action", "launch"),
-                    "app_name": args.get("app_name", ""),
-                },
+                {"action": action, "app_name": app_name},
                 None,
                 {},
             )

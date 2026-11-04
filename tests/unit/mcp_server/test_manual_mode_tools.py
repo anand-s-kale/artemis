@@ -255,3 +255,19 @@ async def test_inline_screenshot_mime_follows_the_bytes(monkeypatch, tmp_path, n
     _result, image = manual_mode._with_inline_screenshot({"screenshot": str(shot)})
 
     assert image.to_image_content().mimeType == mime
+
+
+async def test_mobile_act_description_documents_manage_app_args():
+    """The tool description is what MCP clients see; it must name the real arguments."""
+    tools = {t.name: t for t in await manual_mode.mcp.list_tools()}
+    description = tools["mobile_act"].description
+    assert "app_name" in description and "launch" in description
+
+
+async def test_manage_app_wrong_args_error_names_accepted_args():
+    result = await manual_mode.mobile_act(
+        "manage_app", {"action": "start", "package_name": "com.example.app"}, device_serial="dev1"
+    )
+    assert result["status"] == "error"
+    assert "app_name" in result["message"] and "launch" in result["message"]
+    assert "stop" in result["message"]
