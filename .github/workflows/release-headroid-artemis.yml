@@ -102,13 +102,15 @@ jobs:
             dist-root/
           if-no-files-found: error
 
-  pypi:
-    name: Publish to PyPI
+  pypi-client:
+    name: Publish headroid-artemis-client to PyPI
     needs: build
     # Never runs for workflow_dispatch or branch pushes: tags only.
     if: startsWith(github.ref, 'refs/tags/headroid-artemis-v')
     runs-on: ubuntu-latest
-    environment: pypi
+    # Its own environment: PyPI refuses two pending trusted publishers with the same repository, workflow and
+    # environment, so the client's publisher is told apart by this name.
+    environment: pypi-client
     permissions:
       id-token: write
     steps:
@@ -122,6 +124,20 @@ jobs:
         with:
           packages-dir: dist-client/
           skip-existing: true
+
+  pypi:
+    name: Publish headroid-artemis to PyPI
+    needs: pypi-client
+    if: startsWith(github.ref, 'refs/tags/headroid-artemis-v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: headroid-artemis-dist
 
       - name: Publish headroid-artemis
         uses: pypa/gh-action-pypi-publish@release/v1
