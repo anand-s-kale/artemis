@@ -15,11 +15,15 @@
 
 # Builds and publishes the headroid-artemis and headroid-artemis-client
 # distributions. Publishing happens only for pushed tags named
-# headroid-artemis-v<version>; workflow_dispatch runs build and verify only.
+# headroid-artemis-v<version>; branch pushes and workflow_dispatch only build and verify.
 name: Release headroid-artemis
 
 on:
   push:
+    branches:
+      # Build-only: GitHub cannot dispatch a workflow that is absent from the
+      # default branch. The pypi job below still requires a tag.
+      - headroid-artemis
     tags:
       - "headroid-artemis-v*"
   workflow_dispatch:
