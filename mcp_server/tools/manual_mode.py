@@ -82,7 +82,10 @@ async def mobile_observe(device_serial: str | None = None) -> dict[str, Any]:
     except DeviceBusyError as e:
         return {"status": "error", "error": str(e)}
     except Exception as e:
-        return {"status": "error", "error": f"Failed to initialize/lock Android device controller: {e}"}
+        return {
+            "status": "error",
+            "error": f"Failed to initialize/lock Android device controller: {e}",
+        }
 
     try:
         action_session = await session.executor._session_or_start()
@@ -150,7 +153,10 @@ async def mobile_act(
     except DeviceBusyError as e:
         return {"status": "error", "error": str(e)}
     except Exception as e:
-        return {"status": "error", "error": f"Failed to initialize/lock Android device controller: {e}"}
+        return {
+            "status": "error",
+            "error": f"Failed to initialize/lock Android device controller: {e}",
+        }
 
     result = await session.executor.execute(
         action,

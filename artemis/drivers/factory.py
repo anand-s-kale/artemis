@@ -44,7 +44,7 @@ def create_driver(ctx: "ArtemisContext") -> BaseDeviceDriver:
             from headroid.integrations.artemis import HeadroidDriver
         except ImportError as exc:
             raise RuntimeError(
-                'ARTEMIS_DRIVER=headroid requires the headroid package: '
+                "ARTEMIS_DRIVER=headroid requires the headroid package: "
                 'pip install "headroid[artemis]"'
             ) from exc
         return HeadroidDriver(device_id=ctx.device.device_id)

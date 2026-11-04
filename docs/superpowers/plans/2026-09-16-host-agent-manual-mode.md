@@ -287,8 +287,7 @@ class ManualSessionRegistry:
             lock.acquire(blocking=False)
         except DeviceBusyError as exc:
             raise DeviceBusyError(
-                f"Device '{key}' is busy with another Artemis task or manual "
-                f"session: {exc}"
+                f"Device '{key}' is busy with another Artemis task or manual session: {exc}"
             ) from exc
 
         executor = self._executor_factory(device_serial)
@@ -385,9 +384,7 @@ async def test_mobile_act_click_by_index_after_observe():
     session = manual_mode._registry.get_or_create("dev1")
     assert session.indexed_elements, "mock device produced no elements to click"
 
-    result = await manual_mode.mobile_act(
-        action="click", args={"target": 1}, device_serial="dev1"
-    )
+    result = await manual_mode.mobile_act(action="click", args={"target": 1}, device_serial="dev1")
     assert result["status"] == "success"
     assert result["device_serial"] == "dev1"
 

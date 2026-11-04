@@ -178,7 +178,9 @@ async def test_default_wire_schema_and_structured_content_unchanged(monkeypatch)
             k: v for k, v in ref_schema.items() if k != "title"
         }
 
-    content, structured = await manual_mode.mcp.call_tool("mobile_observe", {"device_serial": "dev1"})
+    content, structured = await manual_mode.mcp.call_tool(
+        "mobile_observe", {"device_serial": "dev1"}
+    )
     assert "result" not in structured
     assert structured["status"] == "success" and structured["device_serial"] == "dev1"
 

@@ -104,7 +104,12 @@ def _boom(*_args, **_kwargs):
 
 @pytest.fixture(autouse=True)
 def _headroid_env(monkeypatch):
-    for name in ("ARTEMIS_CLOUD_MODE", "ARTEMIS_MOCK_DRIVER", "ARTEMIS_DEVICE_ID", "ADB_DEVICE_SERIAL"):
+    for name in (
+        "ARTEMIS_CLOUD_MODE",
+        "ARTEMIS_MOCK_DRIVER",
+        "ARTEMIS_DEVICE_ID",
+        "ADB_DEVICE_SERIAL",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ARTEMIS_DRIVER", "headroid")
     FakeHeadroidDriver.instances = []
