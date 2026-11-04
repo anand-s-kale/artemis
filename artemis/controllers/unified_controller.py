@@ -27,7 +27,7 @@ from uuid import uuid4
 
 from artemis.config.paths import get_temp_dir
 from artemis.context import ArtemisContext
-from artemis.drivers.factory import get_driver
+from artemis.drivers.factory import get_driver, headroid_selected
 from artemis.drivers.base import BaseDeviceDriver
 from artemis.controllers.device_controller import ScreenDataResponse
 from artemis.controllers.types import (
@@ -241,6 +241,10 @@ class UnifiedMobileController:
             for _ in range(nb_chars):
                 await self._driver.press_key("delete")
             return True
+        if headroid_selected():
+            # The shell clear below injects keys without --display (display 0);
+            # the headroid driver clears the focused field on its hidden display.
+            return await self._driver.input_text("", clear_existing=True)
         # Best-effort full clear: End -> Ctrl+A -> Delete
         try:
             clear_cmd = (

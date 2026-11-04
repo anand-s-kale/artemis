@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import asyncio
+from collections.abc import Awaitable, Callable
+import concurrent.futures
 import json
 import logging
 import os
@@ -42,6 +44,7 @@ except Exception as exc:  # pylint: disable=broad-exception-caught
 from artemis.clients.screen_client_factory import create_screen_client
 from artemis.context import ArtemisContext, DeviceContext, DevicePlatform
 from artemis.controllers.unified_controller import UnifiedMobileController
+from artemis.drivers.factory import headroid_selected
 from artemis.platform import platform
 from artemis.utils.app_launch_utils import launch_app_with_retries
 
@@ -89,20 +92,124 @@ mcp = FastMCP("Android_ADB_Controller")
 
 _GLOBAL_CONTROLLER = None
 _CONTROLLERS: dict[str, Any] = {}
+# Strong references to action-session shutdowns scheduled by drop_controller.
+_PENDING_CLOSES: set[asyncio.Task] = set()
+
+
+def _resolve_serial(device_serial: str | None) -> str | None:
+    return (
+        device_serial or os.environ.get("ARTEMIS_DEVICE_ID") or os.environ.get("ADB_DEVICE_SERIAL")
+    )
+
+
+def _run_to_completion(make_coro: Callable[[], Awaitable[Any]]) -> Any:
+    """Runs a driver coroutine to completion from synchronous code.
+
+    The controller cache is synchronous, but it is reached both from plain code
+    (no event loop) and from async MCP tools (a loop is already running in this
+    thread, so it cannot be re-entered). In the latter case the coroutine runs on
+    a private loop in a worker thread and this call blocks until it finishes:
+    connecting or releasing a headroid display must have happened by the time
+    the caller continues.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(make_coro())
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(lambda: asyncio.run(make_coro())).result()
+
+
+def _get_headroid_controller(target_serial: str | None) -> UnifiedMobileController:
+    """Builds a controller on a headroid hidden display; never touches display 0.
+
+    No adb device listing and no screen client: the HeadroidDriver owns every
+    device interaction, and the screen size is the hidden display's.
+    """
+    global _GLOBAL_CONTROLLER
+    if not target_serial:
+        raise Exception(
+            "ARTEMIS_DRIVER=headroid needs a device serial: pass device_serial or set"
+            " ARTEMIS_DEVICE_ID."
+        )
+    ctx = ArtemisContext(
+        trace_id="mcp-session",
+        device=DeviceContext(
+            host_platform=platform.os_type.name,
+            mobile_platform=DevicePlatform.ANDROID,
+            device_id=target_serial,
+        ),
+        adb_client=None,
+        ui_adb_client=None,
+    )
+    controller = UnifiedMobileController(ctx)
+    driver = controller.driver
+    _run_to_completion(driver.connect)
+    try:
+        width, height = driver.screen_size
+    except Exception:
+        _run_to_completion(driver.disconnect)
+        raise
+    ctx.device.device_width = width
+    ctx.device.device_height = height
+
+    _CONTROLLERS[target_serial] = controller
+    if _GLOBAL_CONTROLLER is None:
+        _GLOBAL_CONTROLLER = controller
+    logger.info(f"headroid controller initialized for {target_serial} ({width}x{height})")
+    return controller
+
+
+def drop_controller(device_serial: str | None = None) -> None:
+    """Removes the cached controller for a device and disconnects its driver.
+
+    Under ARTEMIS_DRIVER=headroid disconnecting releases the hidden display, so
+    this returns only after ``driver.disconnect()`` has finished. A disconnect
+    error is logged, not raised: the caller still has a device lock to release.
+    Unknown serials are a no-op.
+    """
+    global _GLOBAL_CONTROLLER
+    target_serial = _resolve_serial(device_serial)
+    if target_serial:
+        controller = _CONTROLLERS.get(target_serial)
+    else:
+        controller = _GLOBAL_CONTROLLER
+    if controller is None:
+        return
+
+    for key in [key for key, cached in _CONTROLLERS.items() if cached is controller]:
+        del _CONTROLLERS[key]
+    if _GLOBAL_CONTROLLER is controller:
+        _GLOBAL_CONTROLLER = None
+
+    action_session = getattr(controller.ctx, "action_session", None)
+    if action_session is not None:
+        try:
+            close = asyncio.get_running_loop().create_task(action_session.aclose())
+        except RuntimeError:
+            pass  # No loop running: the session's owner task died with its loop.
+        else:
+            _PENDING_CLOSES.add(close)
+            close.add_done_callback(_PENDING_CLOSES.discard)
+
+    try:
+        _run_to_completion(controller.driver.disconnect)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.warning(f"Driver disconnect failed for {target_serial or 'default'}: {e}")
 
 
 def _get_controller(device_serial: str | None = None):
     """Lazy-load device controller on-demand, caching per device serial."""
     global _GLOBAL_CONTROLLER, _CONTROLLERS
-    target_serial = (
-        device_serial or os.environ.get("ARTEMIS_DEVICE_ID") or os.environ.get("ADB_DEVICE_SERIAL")
-    )
+    target_serial = _resolve_serial(device_serial)
     if target_serial and target_serial in _CONTROLLERS:
         return _CONTROLLERS[target_serial]
     if not target_serial and _GLOBAL_CONTROLLER is not None:
         return _GLOBAL_CONTROLLER
 
     logger.info("Initializing lazy device controller...")
+    if headroid_selected():
+        return _get_headroid_controller(target_serial)
     if os.environ.get("ARTEMIS_CLOUD_MODE") == "1":
         logger.info(
             "GCP CLOUD MODE active: initializing CloudMobileDeviceController via UnifiedMobileController..."

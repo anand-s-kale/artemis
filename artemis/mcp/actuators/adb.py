@@ -33,6 +33,7 @@ from typing import Any
 
 from artemis.context import ArtemisContext
 from artemis.controllers.unified_controller import UnifiedMobileController
+from artemis.drivers.factory import headroid_selected
 from artemis.mcp.action_manifest import DEVICE_ACTIONS, ExtensionTool
 from artemis.mcp.action_types import ActionCode, ActionResult
 from artemis.utils.logger import get_logger
@@ -283,7 +284,36 @@ class AdbActuator:
 
         return ActionResult.success("press_key", f"Pressed key '{key}'.")
 
+    async def _manage_app_on_hidden_display(self, action: str, package: str) -> ActionResult:
+        """manage_app under ARTEMIS_DRIVER=headroid: the driver launches and stops.
+
+        No app-name lookup (it lists packages over adb and may ask an LLM) and no
+        foreground polling (it reads display 0's focus over adb): ``app_name`` must
+        be the Android package name.
+        """
+        if action.lower() == "launch":
+            if await self.controller.launch_app(package):
+                return ActionResult.success(
+                    "manage_app", f"Launched app '{package}' on the hidden display."
+                )
+            return ActionResult.failure(
+                "manage_app",
+                f"Failed to launch app '{package}' on the hidden display. Under"
+                " ARTEMIS_DRIVER=headroid manage_app needs the Android package name"
+                " (for example com.android.settings).",
+            )
+        if action.lower() == "stop":
+            await self.controller.terminate_app(package)
+            return ActionResult.success("manage_app", f"Force-stopped app '{package}'.")
+        return ActionResult.failure(
+            "manage_app",
+            f"Invalid manage_app action: {action}",
+            code=ActionCode.INVALID_ARGS,
+        )
+
     async def manage_app(self, action: str, app_name: str) -> ActionResult:
+        if headroid_selected():
+            return await self._manage_app_on_hidden_display(action, app_name)
         # Imported lazily: launch_app pulls in tool wrappers that are costly at import.
         from artemis.tools.mobile.launch_app import find_package
         from artemis.utils.app_launch_utils import launch_app_with_retries
@@ -372,7 +402,20 @@ class AdbActuator:
         )
 
     async def open_link(self, url: str) -> ActionResult:
-        success = await self.controller.open_url(url)
+        if headroid_selected():
+            # The controller's open_url runs `am start` without --display, which
+            # would open the link on the main screen.
+            open_url = getattr(self.controller.driver, "open_url", None)
+            if open_url is None:
+                return ActionResult.failure(
+                    "open_link",
+                    "open_link is not supported by this headroid driver (it has no"
+                    " open_url); refusing to open the link on the main display.",
+                    code=ActionCode.UNSUPPORTED,
+                )
+            success = await open_url(url)
+        else:
+            success = await self.controller.open_url(url)
         if success:
             return ActionResult.success("open_link", f"Opened link '{url}'.")
         return ActionResult.failure("open_link", f"Failed to open link '{url}'.")

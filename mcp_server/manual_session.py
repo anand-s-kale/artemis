@@ -34,7 +34,8 @@ import time
 from typing import Any
 
 from artemis.mcp.action_executor import McpActionExecutor
-from artemis.mcp.adb_server import _get_controller
+from artemis.drivers.factory import headroid_selected
+from artemis.mcp.adb_server import _get_controller, drop_controller
 from artemis.runtime.device_lock import DeviceBusyError, DeviceExecutionLock
 
 __all__ = ["ManualSession", "ManualSessionRegistry", "DEFAULT_IDLE_TIMEOUT_S"]
@@ -62,6 +63,7 @@ class ManualSession:
     indexed_points: list[list[int]] = field(default_factory=list)
     latest_screenshot: str | None = None
     latest_ui_hierarchy: str | None = None
+    device_serial: str | None = None
 
 
 def _default_executor_factory(device_serial: str | None) -> McpActionExecutor:
@@ -100,7 +102,12 @@ class ManualSessionRegistry:
         session = self._sessions.pop(key, None)
         if session is None:
             return False
-        session.lock.release()
+        try:
+            if headroid_selected():
+                # Releases the hidden display before another owner can take the lock.
+                drop_controller(session.device_serial)
+        finally:
+            session.lock.release()
         return True
 
     def get_or_create(self, device_serial: str | None) -> ManualSession:
@@ -130,8 +137,17 @@ class ManualSessionRegistry:
                 f"Device '{key}' is busy with another Artemis task or manual session: {exc}"
             ) from exc
 
-        executor = self._executor_factory(device_serial)
-        session = ManualSession(executor=executor, lock=lock, last_used=time.monotonic())
+        try:
+            executor = self._executor_factory(device_serial)
+        except BaseException:
+            lock.release()
+            raise
+        session = ManualSession(
+            executor=executor,
+            lock=lock,
+            last_used=time.monotonic(),
+            device_serial=device_serial,
+        )
         self._sessions[key] = session
         return session
 
