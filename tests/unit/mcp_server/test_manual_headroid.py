@@ -29,6 +29,11 @@ from artemis.runtime import device_lock
 from artemis.runtime.device_lock import DeviceBusyError
 from mcp_server.manual_session import ManualSessionRegistry
 
+try:  # the real error type, when headroid is installed next to the fork
+    from headroid.rpc import RpcError as _HeadroidRpcError
+except ImportError:
+    _HeadroidRpcError = None
+
 SERIAL = "SERIAL"
 
 
@@ -67,6 +72,7 @@ class FakeHeadroidDriver:
 
     async def open_url(self, url: str) -> bool:
         self.calls.append(("open_url", url))
+        self.last_opened_package = "com.android.chrome"
         return True
 
     async def input_text(self, text: str, clear_existing: bool = True) -> bool:
@@ -236,7 +242,8 @@ async def test_open_link_uses_the_driver():
     result = await actuator.open_link("https://example.com")
 
     assert result.ok, result.message
-    assert "hidden display" in result.message
+    # the agent is told which app it is in now
+    assert "with com.android.chrome on the hidden display" in result.message
     assert driver.count("open_url") == 1
     assert ("open_url", "https://example.com") in driver.calls
 
@@ -253,6 +260,54 @@ async def test_open_link_reports_headroids_refusal():
 
     assert not result.ok
     assert "no single app handles x:y" in result.message
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(_HeadroidRpcError is None, reason="headroid is not installed")
+async def test_open_link_reports_headroids_rpc_error():
+    # the error type the real HeadroidDriver raises; the real one, imported before
+    # the fixture replaces the headroid modules with stubs
+    actuator, driver = _actuator()
+
+    async def open_on_display_0(url: str) -> bool:
+        raise _HeadroidRpcError(
+            -32602, "url: com.android.chrome is open on display [0]; close it on the phone first"
+        )
+
+    driver.open_url = open_on_display_0
+    result = await actuator.open_link("https://example.com")
+
+    assert not result.ok
+    assert "is open on display [0]" in result.message
+
+
+@pytest.mark.asyncio
+async def test_stdio_open_link_goes_through_the_driver(monkeypatch):
+    # the stdio server's own open_link tool must not reach the controller's `am start`
+    driver = adb_server._get_controller(SERIAL).driver
+    monkeypatch.setenv("ADB_DEVICE_SERIAL", SERIAL)
+
+    answer = await adb_server.open_link(None, "https://example.com")
+
+    assert answer.startswith("Success"), answer
+    assert "hidden display" in answer
+    assert ("open_url", "https://example.com") in driver.calls
+
+
+@pytest.mark.asyncio
+async def test_stdio_open_link_reports_a_refusal(monkeypatch):
+    driver = adb_server._get_controller(SERIAL).driver
+
+    async def refused(url: str) -> bool:
+        raise RuntimeError("[-32602] url: headroid does not open tel: links")
+
+    driver.open_url = refused
+    monkeypatch.setenv("ADB_DEVICE_SERIAL", SERIAL)
+
+    answer = await adb_server.open_link(None, "tel:123")
+
+    assert answer.startswith("Failed"), answer
+    assert "does not open tel: links" in answer
 
 
 @pytest.mark.asyncio

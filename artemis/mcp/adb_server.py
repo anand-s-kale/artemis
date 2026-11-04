@@ -290,6 +290,7 @@ def _get_controller(device_serial: str | None = None):
 # pixel-space contract for external MCP clients, but the element/focus logic has a
 # single implementation in artemis.mcp.actuators.adb.
 from artemis.mcp.actuators.adb import (  # noqa: E402  pylint: disable=wrong-import-position
+    AdbActuator,
     ensure_focus_at_coords as _ensure_focus_at_coords,
     find_element_at_coords as _find_element_at_coords,
 )
@@ -435,6 +436,11 @@ async def open_link(ctx: Context, url: str) -> str:
     except Exception as e:
         return f"Error: Controller lazy initialization failed: {e}"
 
+    if headroid_selected():
+        # The controller's open_url runs `am start` on the main screen; the
+        # actuator opens the link on the hidden display through the driver.
+        result = await AdbActuator(controller.ctx, controller).open_link(url)
+        return f"Success: {result.message}" if result.ok else f"Failed: {result.message}"
     success = await controller.open_url(url)
     return "Success" if success else "Failed"
 

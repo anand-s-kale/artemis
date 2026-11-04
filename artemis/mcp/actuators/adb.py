@@ -423,10 +423,11 @@ class AdbActuator:
 
         The controller's open_url runs `am start` without --display (the main
         screen). headroid's open_url resolves the one app that handles the link
-        and launches it on the hidden display like manage_app: muted, in its own
-        task, stopped when the session ends.
+        and launches it on the hidden display like manage_app: sound and
+        vibration muted, in its own task, stopped when the session ends.
         """
-        open_url = getattr(self.controller.driver, "open_url", None)
+        driver = self.controller.driver
+        open_url = getattr(driver, "open_url", None)
         if open_url is None:
             return ActionResult.failure(
                 "open_link",
@@ -438,10 +439,15 @@ class AdbActuator:
         try:
             opened = await open_url(url)
         except _hidden_display_errors() as exc:
-            # headroid refuses a link no app handles, or one Android would ask about.
+            # headroid refuses a link no app handles, one Android would ask about,
+            # a refused scheme, or one whose app is open on the phone's own screen.
             opened, error = False, f" ({exc})"
         if opened:
-            return ActionResult.success("open_link", f"Opened link '{url}' on the hidden display.")
+            package = getattr(driver, "last_opened_package", None)
+            with_app = f" with {package}" if package else ""
+            return ActionResult.success(
+                "open_link", f"Opened link '{url}'{with_app} on the hidden display."
+            )
         return ActionResult.failure(
             "open_link", f"Failed to open link '{url}' on the hidden display{error}."
         )
