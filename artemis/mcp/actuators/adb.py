@@ -418,17 +418,37 @@ class AdbActuator:
             code=ActionCode.TIMEOUT,
         )
 
-    async def open_link(self, url: str) -> ActionResult:
-        if headroid_selected():
-            # The controller's open_url runs `am start` without --display (the
-            # main screen), and a raw `am start` on the hidden display would leave
-            # the opened app unmuted, untracked and running after the session ends.
+    async def _open_link_on_hidden_display(self, url: str) -> ActionResult:
+        """open_link under ARTEMIS_DRIVER=headroid: the driver opens the link.
+
+        The controller's open_url runs `am start` without --display (the main
+        screen). headroid's open_url resolves the one app that handles the link
+        and launches it on the hidden display like manage_app: muted, in its own
+        task, stopped when the session ends.
+        """
+        open_url = getattr(self.controller.driver, "open_url", None)
+        if open_url is None:
             return ActionResult.failure(
                 "open_link",
-                "open_link is not available on the hidden display yet; launch the app"
-                " with manage_app instead.",
+                "open_link is not supported by this headroid driver (it has no"
+                " open_url); refusing to open the link on the main display.",
                 code=ActionCode.UNSUPPORTED,
             )
+        error = ""
+        try:
+            opened = await open_url(url)
+        except _hidden_display_errors() as exc:
+            # headroid refuses a link no app handles, or one Android would ask about.
+            opened, error = False, f" ({exc})"
+        if opened:
+            return ActionResult.success("open_link", f"Opened link '{url}' on the hidden display.")
+        return ActionResult.failure(
+            "open_link", f"Failed to open link '{url}' on the hidden display{error}."
+        )
+
+    async def open_link(self, url: str) -> ActionResult:
+        if headroid_selected():
+            return await self._open_link_on_hidden_display(url)
         success = await self.controller.open_url(url)
         if success:
             return ActionResult.success("open_link", f"Opened link '{url}'.")

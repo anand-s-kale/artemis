@@ -137,10 +137,11 @@ async def mobile_act(
         action: One of: click, long_press, input_text, click_sequence, swipe,
           press_key, manage_app, wait_for_delay, wait_for_text, open_link,
           erase_one_char, focus_and_clear_text (on a headroid hidden display
-          open_link is not available yet). A click/long_press/input_text
-          'target' may be an element index from the last mobile_observe or
-          mobile_act call's elements_text list, or a normalized [x, y] pair
-          (in which case args must also include 'target_description').
+          open_link opens the link with the one app that handles it). A
+          click/long_press/input_text 'target' may be an element index from
+          the last mobile_observe or mobile_act call's elements_text list, or
+          a normalized [x, y] pair (in which case args must also include
+          'target_description').
           ask_explorer, video_analyzer, and the note/history tools are not
           available here: they invoke Artemis's own LLM and would silently
           reintroduce the credential requirement this mode avoids.

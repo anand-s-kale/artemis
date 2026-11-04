@@ -153,7 +153,8 @@ class RecordingHeadroidDriver:
         return True
 
     async def open_url(self, url: str) -> bool:
-        raise AssertionError("open_link must not reach the driver under headroid")
+        self.calls.append(("open_url", url))
+        return True
 
     async def execute_shell(self, command: str, timeout_seconds: float = 15.0) -> str:
         raise AssertionError(f"execute_shell must not run under headroid: {command!r}")
@@ -284,15 +285,15 @@ async def test_observe_then_every_action_reaches_only_the_hidden_display(monkeyp
     assert driver.names()[-1] == "disconnect"
 
 
-async def test_open_link_is_refused_without_touching_the_driver():
+async def test_open_link_goes_through_the_driver():
+    # headroid's open_url, never the controller's `am start` (subprocess and adb raise here).
     await manual_mode.mobile_observe()
     result = _data(
         await manual_mode.mobile_act(action="open_link", args={"url": "https://example.com"})
     )
-    assert result["status"] == "error"
-    assert "open_link is not available on the hidden display yet" in result["message"]
-    assert "manage_app" in result["message"]
-    assert "open_url" not in _driver().names()
+    assert result["status"] != "error", result
+    assert "hidden display" in result["message"]
+    assert ("open_url", "https://example.com") in _driver().calls
 
 
 async def test_inline_screenshot_from_the_real_observe_fallback_is_png():

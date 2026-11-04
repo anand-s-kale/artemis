@@ -228,17 +228,31 @@ async def test_manage_app_launch_failure_names_package_requirement():
 
 
 @pytest.mark.asyncio
-async def test_open_link_is_refused_on_the_hidden_display():
-    # A raw `am start` would leave the opened app unmuted and running after the session.
+async def test_open_link_uses_the_driver():
+    # headroid's open_url launches the handling app on the hidden display (muted,
+    # stopped at teardown); the controller's open_url would `am start` on display 0.
     actuator, driver = _actuator()
 
     result = await actuator.open_link("https://example.com")
 
+    assert result.ok, result.message
+    assert "hidden display" in result.message
+    assert driver.count("open_url") == 1
+    assert ("open_url", "https://example.com") in driver.calls
+
+
+@pytest.mark.asyncio
+async def test_open_link_reports_headroids_refusal():
+    actuator, driver = _actuator()
+
+    async def no_single_app(url: str) -> bool:
+        raise RuntimeError(f"[-32602] url: no single app handles {url}")
+
+    driver.open_url = no_single_app
+    result = await actuator.open_link("x:y")
+
     assert not result.ok
-    assert result.code == ActionCode.UNSUPPORTED
-    assert "open_link is not available on the hidden display yet" in result.message
-    assert "manage_app" in result.message
-    assert driver.count("open_url") == 0
+    assert "no single app handles x:y" in result.message
 
 
 @pytest.mark.asyncio
