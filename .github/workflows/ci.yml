@@ -164,7 +164,7 @@ jobs:
           assert artemis.__version__ == version("headroid-artemis")
           assert bundled_config is not None and bundled_config.is_file()
           assert bundled_ui is not None and (bundled_ui / "index.html").is_file()
-          assert not any("node_modules" in str(path) for path in (files("artemis") or ()))
+          assert not any("node_modules" in str(path) for path in (files("headroid-artemis") or ()))
           print(f"Installed Artemis {artemis.__version__} with bundled runtime resources")
           PY
           artemis --version

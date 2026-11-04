@@ -23,6 +23,12 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 
+[project.urls]
+Homepage = "https://github.com/anand-s-kale/artemis"
+Repository = "https://github.com/anand-s-kale/artemis"
+Issues = "https://github.com/anand-s-kale/artemis/issues"
+Upstream = "https://github.com/google/artemis"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

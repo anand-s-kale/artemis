@@ -94,9 +94,9 @@ artemis-admin = "apps.admin_console.server:main"
 
 
 [project.urls]
-Homepage = "https://github.com/MrAk47Anand007/artemis"
-Repository = "https://github.com/MrAk47Anand007/artemis"
-Issues = "https://github.com/MrAk47Anand007/artemis/issues"
+Homepage = "https://github.com/anand-s-kale/artemis"
+Repository = "https://github.com/anand-s-kale/artemis"
+Issues = "https://github.com/anand-s-kale/artemis/issues"
 Upstream = "https://github.com/google/artemis"
 
 [build-system]
