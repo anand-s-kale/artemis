@@ -54,7 +54,7 @@ def _inline_screenshot_enabled() -> bool:
 _STRUCTURED_OUTPUT = False if _inline_screenshot_enabled() else None
 
 
-def _with_inline_screenshot(result: dict[str, Any]) -> dict[str, Any] | list[Any]:
+def _with_inline_screenshot(result: dict[str, Any]) -> dict[str, Any]:
     """With ARTEMIS_MCP_INLINE_SCREENSHOT=1, also return the screenshot as image
     content, for clients that cannot read the local path. Otherwise unchanged."""
     path = result.get("screenshot")
@@ -64,7 +64,7 @@ def _with_inline_screenshot(result: dict[str, Any]) -> dict[str, Any] | list[Any
 
 
 @mcp.tool(structured_output=_STRUCTURED_OUTPUT)
-async def mobile_observe(device_serial: str | None = None) -> dict[str, Any] | list[Any]:
+async def mobile_observe(device_serial: str | None = None) -> dict[str, Any]:
     """Captures the current screen and numbered UI-element list for host-driven control.
 
     Unlike mobile_run_task, this performs no reasoning and needs no LLM
@@ -118,7 +118,7 @@ async def mobile_act(
     action: str,
     args: dict[str, Any] | None = None,
     device_serial: str | None = None,
-) -> dict[str, Any] | list[Any]:
+) -> dict[str, Any]:
     """Runs one validated device action and returns the resulting screen state.
 
     Args:

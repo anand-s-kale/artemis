@@ -1,5 +1,7 @@
 """mobile_observe / mobile_act / mobile_session_end, exercised against a mock device."""
 
+from typing import Any
+
 import pytest
 
 from artemis.mcp.action_executor import McpActionExecutor
@@ -154,16 +156,82 @@ async def test_default_returns_dict_only(monkeypatch, tmp_path):
     assert result["status"] == "success"
 
 
-async def test_inline_result_serializes_through_fastmcp(monkeypatch, tmp_path):
-    """With inline mode on at import time, the list return converts to text + image blocks."""
-    shot = _png_path(tmp_path)
-    monkeypatch.setenv("ARTEMIS_MCP_INLINE_SCREENSHOT", "1")
+async def test_default_wire_schema_and_structured_content_unchanged(monkeypatch):
+    """Env unset: outputSchema is the plain-dict one and structuredContent has no 'result' wrapper."""
     from mcp.server.fastmcp import FastMCP
 
-    # Re-register the tool on a throwaway server with the inline-mode decorator arg.
-    server = FastMCP("inline-test")
-    server.tool(structured_output=False)(manual_mode.mobile_observe)
-    tool = server._tool_manager.get_tool("mobile_observe")
-    out = manual_mode._with_inline_screenshot({"status": "success", "screenshot": str(shot)})
-    content = tool.fn_metadata.convert_result(out)
-    assert [c.type for c in content] == ["text", "image"]
+    monkeypatch.delenv("ARTEMIS_MCP_INLINE_SCREENSHOT", raising=False)
+
+    def reference() -> dict[str, Any]:  # what the original annotation produces
+        return {"a": 1}
+
+    ref = FastMCP("ref")
+    ref.add_tool(reference)
+    ref_schema = (await ref.list_tools())[0].outputSchema
+
+    tools = {t.name: t for t in await manual_mode.mcp.list_tools()}
+    for name in ("mobile_observe", "mobile_act"):
+        schema = tools[name].outputSchema
+        assert schema["type"] == "object" and schema["additionalProperties"] is True
+        assert "properties" not in schema
+        assert {k: v for k, v in schema.items() if k != "title"} == {
+            k: v for k, v in ref_schema.items() if k != "title"
+        }
+
+    content, structured = await manual_mode.mcp.call_tool("mobile_observe", {"device_serial": "dev1"})
+    assert "result" not in structured
+    assert structured["status"] == "success" and structured["device_serial"] == "dev1"
+
+
+async def test_inline_mode_end_to_end_in_fresh_process(tmp_path):
+    """With the env var set at process start, the real server returns text + image content."""
+    import subprocess
+    import sys
+    import textwrap
+
+    shot = _png_path(tmp_path)
+    script = textwrap.dedent(
+        f"""
+        import asyncio
+        import mcp_server.tools.manual_mode as mm
+        from mcp_server.manual_session import ManualSessionRegistry
+        from artemis.mcp.action_executor import McpActionExecutor
+        from artemis.mcp.actuators.mock import MockActuator
+
+        assert mm._STRUCTURED_OUTPUT is False
+
+        def factory(serial):
+            a = MockActuator()
+            return McpActionExecutor(a.ctx, actuator=a, agent_name="manual")
+
+        mm._registry = ManualSessionRegistry(executor_factory=factory)
+
+        class Obs:
+            ok = True; hierarchy_ok = False; elements = []; width = 1; height = 1
+            screenshot_path = {str(shot)!r}; elements_text = "x"
+
+        class AS:
+            async def observe(self, settle_ms=0):
+                return Obs()
+
+        async def main():
+            s = mm._registry.get_or_create("d")
+            async def start():
+                return AS()
+            s.executor._session_or_start = start
+            tools = {{t.name: t for t in await mm.mcp.list_tools()}}
+            assert tools["mobile_observe"].outputSchema is None
+            out = await mm.mcp.call_tool("mobile_observe", {{"device_serial": "d"}})
+            print([c.type for c in out])
+
+        asyncio.run(main())
+        """
+    )
+    import os
+
+    env = {**os.environ, "ARTEMIS_MCP_INLINE_SCREENSHOT": "1", "GOOGLE_API_KEY": "dummy"}
+    proc = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, env=env, timeout=120
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip().splitlines()[-1] == "['text', 'image']"
