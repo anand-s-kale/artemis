@@ -90,8 +90,34 @@ from artemis.runtime import shutdown_awake_service, start_awake_service
 import threading
 
 
+def apply_tool_allowlist(server, names: set[str] | None) -> None:
+    """Removes every registered tool not in ``names``; ``None`` keeps all tools.
+
+    Raises ValueError naming any entry that is not a registered tool, so a typo
+    in ARTEMIS_MCP_TOOLS fails at startup instead of silently hiding a tool.
+    """
+    if names is None:
+        return
+    registered = {tool.name for tool in server._tool_manager.list_tools()}
+    unknown = sorted(names - registered)
+    if unknown:
+        raise ValueError(
+            f"ARTEMIS_MCP_TOOLS names unknown tool(s): {', '.join(unknown)}. "
+            f"Available: {', '.join(sorted(registered))}"
+        )
+    for name in sorted(registered - names):
+        server.remove_tool(name)
+
+
+def _allowlist_from_env() -> set[str] | None:
+    raw = os.environ.get("ARTEMIS_MCP_TOOLS", "")
+    names = {part.strip() for part in raw.split(",") if part.strip()}
+    return names or None
+
+
 def main(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8001):
     """Main entrypoint to run the Artemis Mobile Agent MCP server."""
+    apply_tool_allowlist(mcp, _allowlist_from_env())
     threading.Thread(target=start_awake_service, daemon=True, name="artemis-awake-init").start()
     try:
         if transport.lower() == "sse":

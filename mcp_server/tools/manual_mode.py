@@ -22,7 +22,10 @@ same reactive cycle FlashRunner runs autonomously, just driven turn-by-turn
 by the host instead of Artemis's own LLM router.
 """
 
+import os
 from typing import Any
+
+from mcp.server.fastmcp import Image
 
 from mcp_server.base import mcp
 from mcp_server.manual_session import ManualSessionRegistry
@@ -40,8 +43,28 @@ _ALLOWED_ACTIONS: frozenset[str] = REQUIRED_ACTIONS | OPTIONAL_ACTIONS
 _registry = ManualSessionRegistry()
 
 
-@mcp.tool()
-async def mobile_observe(device_serial: str | None = None) -> dict[str, Any]:
+def _inline_screenshot_enabled() -> bool:
+    return os.environ.get("ARTEMIS_MCP_INLINE_SCREENSHOT", "").strip() == "1"
+
+
+#: Image content cannot be part of a structured-output schema, so with inline
+#: screenshots the two screen tools return unstructured content (JSON text +
+#: image). Left at None (FastMCP's default) otherwise, so default behaviour is
+#: unchanged. The env var is read when this module is imported (server start).
+_STRUCTURED_OUTPUT = False if _inline_screenshot_enabled() else None
+
+
+def _with_inline_screenshot(result: dict[str, Any]) -> dict[str, Any] | list[Any]:
+    """With ARTEMIS_MCP_INLINE_SCREENSHOT=1, also return the screenshot as image
+    content, for clients that cannot read the local path. Otherwise unchanged."""
+    path = result.get("screenshot")
+    if _inline_screenshot_enabled() and path and os.path.isfile(path):
+        return [result, Image(path=path)]
+    return result
+
+
+@mcp.tool(structured_output=_STRUCTURED_OUTPUT)
+async def mobile_observe(device_serial: str | None = None) -> dict[str, Any] | list[Any]:
     """Captures the current screen and numbered UI-element list for host-driven control.
 
     Unlike mobile_run_task, this performs no reasoning and needs no LLM
@@ -78,22 +101,24 @@ async def mobile_observe(device_serial: str | None = None) -> dict[str, Any]:
         session.indexed_points = [el["center"] for el in obs.elements]
     session.latest_screenshot = obs.screenshot_path
 
-    return {
-        "status": "success",
-        "device_serial": device_serial or "auto-select",
-        "screenshot": obs.screenshot_path,
-        "elements_text": obs.elements_text,
-        "width": obs.width,
-        "height": obs.height,
-    }
+    return _with_inline_screenshot(
+        {
+            "status": "success",
+            "device_serial": device_serial or "auto-select",
+            "screenshot": obs.screenshot_path,
+            "elements_text": obs.elements_text,
+            "width": obs.width,
+            "height": obs.height,
+        }
+    )
 
 
-@mcp.tool()
+@mcp.tool(structured_output=_STRUCTURED_OUTPUT)
 async def mobile_act(
     action: str,
     args: dict[str, Any] | None = None,
     device_serial: str | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any] | list[Any]:
     """Runs one validated device action and returns the resulting screen state.
 
     Args:
@@ -134,13 +159,15 @@ async def mobile_act(
         state=session,
     )
 
-    return {
-        "status": result.status,
-        "message": result.text_summary,
-        "device_serial": device_serial or "auto-select",
-        "screenshot": session.latest_screenshot,
-        "elements_text": result.ui_elements_text,
-    }
+    return _with_inline_screenshot(
+        {
+            "status": result.status,
+            "message": result.text_summary,
+            "device_serial": device_serial or "auto-select",
+            "screenshot": session.latest_screenshot,
+            "elements_text": result.ui_elements_text,
+        }
+    )
 
 
 @mcp.tool()

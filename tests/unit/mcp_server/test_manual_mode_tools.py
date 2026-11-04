@@ -98,3 +98,72 @@ async def test_mobile_session_end_is_idempotent():
     second = manual_mode.mobile_session_end(device_serial="dev1")
     assert first == {"status": "success", "device_serial": "dev1", "ended": True}
     assert second == {"status": "success", "device_serial": "dev1", "ended": False}
+
+
+def _png_path(tmp_path):
+    path = tmp_path / "shot.png"
+    # 1x1 PNG
+    path.write_bytes(
+        bytes.fromhex(
+            "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+            "0000000d49444154789c6360f8cfc0f01f0005000201a5f645400000000049454e44ae426082"
+        )
+    )
+    return path
+
+
+async def test_inline_screenshot_returns_image_content(monkeypatch, tmp_path):
+    from mcp.server.fastmcp import Image
+
+    shot = _png_path(tmp_path)
+    monkeypatch.setenv("ARTEMIS_MCP_INLINE_SCREENSHOT", "1")
+
+    class _Obs:
+        ok = True
+        hierarchy_ok = False
+        screenshot_path = str(shot)
+        elements_text = "1: Wi-Fi"
+        elements: list = []
+        width = 1
+        height = 1
+
+    class _ActionSession:
+        async def observe(self, settle_ms=0):
+            return _Obs()
+
+    session = manual_mode._registry.get_or_create("dev1")
+
+    async def _session_or_start():
+        return _ActionSession()
+
+    monkeypatch.setattr(session.executor, "_session_or_start", _session_or_start)
+
+    result = await manual_mode.mobile_observe(device_serial="dev1")
+    assert isinstance(result, list) and len(result) == 2
+    data, image = result
+    assert data["status"] == "success"
+    assert data["screenshot"] == str(shot)
+    assert isinstance(image, Image)
+    assert image.to_image_content().type == "image"
+
+
+async def test_default_returns_dict_only(monkeypatch, tmp_path):
+    monkeypatch.delenv("ARTEMIS_MCP_INLINE_SCREENSHOT", raising=False)
+    result = await manual_mode.mobile_observe(device_serial="dev1")
+    assert isinstance(result, dict)
+    assert result["status"] == "success"
+
+
+async def test_inline_result_serializes_through_fastmcp(monkeypatch, tmp_path):
+    """With inline mode on at import time, the list return converts to text + image blocks."""
+    shot = _png_path(tmp_path)
+    monkeypatch.setenv("ARTEMIS_MCP_INLINE_SCREENSHOT", "1")
+    from mcp.server.fastmcp import FastMCP
+
+    # Re-register the tool on a throwaway server with the inline-mode decorator arg.
+    server = FastMCP("inline-test")
+    server.tool(structured_output=False)(manual_mode.mobile_observe)
+    tool = server._tool_manager.get_tool("mobile_observe")
+    out = manual_mode._with_inline_screenshot({"status": "success", "screenshot": str(shot)})
+    content = tool.fn_metadata.convert_result(out)
+    assert [c.type for c in content] == ["text", "image"]
