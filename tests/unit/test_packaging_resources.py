@@ -21,7 +21,7 @@ from artemis import resources
 
 
 def test_public_version_comes_from_distribution_metadata():
-    assert artemis.__version__ == version("artemis")
+    assert artemis.__version__ == version("headroid-artemis")
 
 
 def test_source_tree_contains_complete_release_resources():

@@ -50,8 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=wheel-builder /wheels/ /wheels/
-RUN pip install --no-cache-dir /wheels/artemis_client-*.whl \
-    && pip install --no-cache-dir /wheels/artemis-*.whl \
+RUN pip install --no-cache-dir /wheels/headroid_artemis_client-*.whl \
+    && pip install --no-cache-dir /wheels/headroid_artemis-*.whl \
     && rm -rf /wheels
 
 ENV PYTHONUNBUFFERED=1

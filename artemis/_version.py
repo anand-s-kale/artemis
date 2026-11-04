@@ -19,10 +19,12 @@ from importlib.metadata import PackageNotFoundError, version
 
 def get_version() -> str:
     """Return the installed Artemis version, or an honest source-tree sentinel."""
-    try:
-        return version("artemis")
-    except PackageNotFoundError:
-        return "0+unknown"
+    for dist_name in ("headroid-artemis", "artemis"):
+        try:
+            return version(dist_name)
+        except PackageNotFoundError:
+            continue
+    return "0+unknown"
 
 
 __version__ = get_version()

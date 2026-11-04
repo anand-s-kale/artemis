@@ -1,0 +1,121 @@
+# Copyright 2026 Google LLC
+# Modifications Copyright 2026 Anand S Kale
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Builds and publishes the headroid-artemis and headroid-artemis-client
+# distributions. Publishing happens only for pushed tags named
+# headroid-artemis-v<version>; workflow_dispatch runs build and verify only.
+name: Release headroid-artemis
+
+on:
+  push:
+    tags:
+      - "headroid-artemis-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: apps/showcase_ui/package-lock.json
+
+      - name: Build the Showcase UI (setup.py refuses to build without it)
+        run: |
+          npm ci --prefix apps/showcase_ui
+          npm run build --prefix apps/showcase_ui
+
+      - name: Check the tag matches both package versions
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+
+          def read(path):
+              with open(path, "rb") as handle:
+                  project = tomllib.load(handle)["project"]
+              return project["name"], project["version"]
+
+          root_name, root_version = read("pyproject.toml")
+          client_name, client_version = read("packages/artemis-client/pyproject.toml")
+          assert root_name == "headroid-artemis", root_name
+          assert client_name == "headroid-artemis-client", client_name
+          assert root_version == client_version, (root_version, client_version)
+          if os.environ["GITHUB_REF"].startswith("refs/tags/"):
+              tag = os.environ["GITHUB_REF_NAME"]
+              assert tag == f"headroid-artemis-v{root_version}", (tag, root_version)
+          print(f"Versions OK: {root_version}")
+          PY
+
+      - name: Build both wheels
+        env:
+          USE_CYTHON: "0"
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build --wheel --outdir dist-client packages/artemis-client
+          python -m build --wheel --outdir dist-root .
+
+      - name: Check metadata
+        run: |
+          python -m twine check --strict dist-client/* dist-root/*
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: headroid-artemis-dist
+          path: |
+            dist-client/
+            dist-root/
+          if-no-files-found: error
+
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    # Never runs for workflow_dispatch or branch pushes: tags only.
+    if: startsWith(github.ref, 'refs/tags/headroid-artemis-v')
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: headroid-artemis-dist
+
+      - name: Publish headroid-artemis-client
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist-client/
+
+      - name: Publish headroid-artemis
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist-root/

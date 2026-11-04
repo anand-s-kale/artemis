@@ -13,9 +13,10 @@
 # limitations under the License.
 
 [project]
-name = "artemis"
-version = "1.0"
+name = "headroid-artemis"
+version = "0.1.0a1"
 description = "Autonomous AI Assistant for Mobile Automation"
+readme = "README.md"
 
 authors = [
     { name = "Farley Wang", email="farleyw@google.com" },
@@ -25,7 +26,7 @@ requires-python = ">=3.12"
 
 dependencies = [
     # Remote Python SDK (kept as a zero-dependency workspace package)
-    "artemis-client>=0.1.0",
+    "headroid-artemis-client==0.1.0a1",
     # Orchestration & Framework
     "langgraph>=1.0.2,<2.0.0",
     "langchain>=1.0.0",
@@ -92,6 +93,12 @@ artemis = "artemis.interfaces.cli.main:cli"
 artemis-admin = "apps.admin_console.server:main"
 
 
+[project.urls]
+Homepage = "https://github.com/MrAk47Anand007/artemis"
+Repository = "https://github.com/MrAk47Anand007/artemis"
+Issues = "https://github.com/MrAk47Anand007/artemis/issues"
+Upstream = "https://github.com/google/artemis"
+
 [build-system]
 # requires = ["uv_build>=0.7.20,<0.8.0"]
 # build-backend = "uv_build"
@@ -102,7 +109,7 @@ build-backend = "setuptools.build_meta"
 members = ["packages/artemis-client"]
 
 [tool.uv.sources]
-artemis-client = { workspace = true }
+headroid-artemis-client = { workspace = true }
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

@@ -138,13 +138,13 @@ jobs:
 
       - name: Build client and Artemis distributions
         run: |
-          uv build --package artemis-client --wheel --out-dir dist
-          uv build --package artemis --wheel --sdist --out-dir dist
+          uv build --package headroid-artemis-client --wheel --out-dir dist
+          uv build --package headroid-artemis --wheel --sdist --out-dir dist
 
       - name: Install wheels in a clean environment
         run: |
           uv venv .smoke-venv --python 3.12
-          uv pip install --python .smoke-venv/bin/python dist/artemis_client-*.whl dist/artemis-*.whl
+          uv pip install --python .smoke-venv/bin/python dist/headroid_artemis_client-*.whl dist/headroid_artemis-*.whl
 
       - name: Smoke-test installed package and CLI
         shell: bash
@@ -161,7 +161,7 @@ jobs:
 
           bundled_config = get_bundled_config_path("artemis.jsonc")
           bundled_ui = get_bundled_showcase_dist()
-          assert artemis.__version__ == version("artemis")
+          assert artemis.__version__ == version("headroid-artemis")
           assert bundled_config is not None and bundled_config.is_file()
           assert bundled_ui is not None and (bundled_ui / "index.html").is_file()
           assert not any("node_modules" in str(path) for path in (files("artemis") or ()))

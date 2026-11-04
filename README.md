@@ -1,3 +1,5 @@
+> This is the `headroid-artemis` distribution of a fork of [google/artemis](https://github.com/google/artemis), published to PyPI as `headroid-artemis` (with `headroid-artemis-client`) so that `pip install "headroid[artemis]"` can pull it in. Import names (`artemis`, `artemis_client`, `mcp_server`) are unchanged.
+
 <p align="center">
   <img src="./docs/assets/artemis-banner.png?v=7" alt="ARTEMIS Banner" width="100%" />
 </p>
